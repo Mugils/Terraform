@@ -1,0 +1,157 @@
+openapi: 3.0.0
+info:
+  title: ${api-name}
+  version: 1.0.0
+paths:
+  /books-api/create-book-entry:
+    post:
+      summary: "Create new books entry"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/BooksEntry"
+      responses:
+        "202":
+          description: "Book entry created successfully"
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/PostBooksEntryResponse"
+        "400":
+          description: "Invalid input"
+          content:
+            application/json:
+              schema:
+                type: "object"
+                properties:
+                  message:
+                    type: "string"
+      x-amazon-apigateway-integration:
+        uri: "${step-function-action-StartExecution}"
+        httpMethod: "POST"
+        type: "aws"
+        passthroughBehavior: "NEVER"
+        credentials: "${apigateway-role-arn}"
+        requestTemplates:
+          application/json: | 
+              #set($stateMachineArn = '${step-function-arn}')
+              {
+                  "input": "$util.escapeJavaScript($input.body)",
+                  "stateMachineArn": "$stateMachineArn"
+              }
+        responses:
+          default:
+            statusCode: "202"
+            responseTemplates:
+              application/json: |
+                  #set($response = $util.parseJson($input.json('$')))
+                  #set($executionArn = $response.executionArn)
+                  {
+                      "message": "Book entry creation initiated.",
+                      "executionArn": "$executionArn"
+                  }
+  /books-api/get-book-entry:
+    get:
+      summary: "Get book entry by title"
+      parameters:
+        - name: "id"
+          in: path
+          required: true
+          schema:
+            type: "string"
+      responses:
+        200:
+          description: "Book entry retrieved successfully"
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/BooksEntry"
+        404:
+          description: "Book entry not found"
+      x-amazon-apigateway-integration:
+        uri: "${step-function-action-DescribeExecution}"
+        httpMethod: "POST"
+        type: "aws"
+        credentials: "${apigateway-role-arn}"
+        "passthroughBehavior": "NEVER"
+        requestTemplates:
+          application/json: | 
+            #set ($id = $input.params('id'))
+            #set($stepfunction-ExecutionArn = "${step-function-execution-Arn}:$id")
+            {"executionArn": "$stepfunction-ExecutionArn"}
+        responseTemplates:
+          application/json: | 
+            #set($response = $util.parseJson($input.json('$')))
+            #if($response.status == "SUCCEEDED")
+              #set($output = $util.parseJson($response.output))
+              {
+                  "id": "$output.id",
+                  "bookTitle": "$output.bookTitle",
+                  "bookAuthor": "$output.bookAuthor",
+                  "bookGenre": "$output.bookGenre",
+                  "publishedYear": $output.publishedYear,
+                  "createdOn": "$output.createdOn",
+                  "updatedOn": "$output.updatedOn"
+              }
+            #else
+              {
+                  "message": "Book entry not found."
+              }
+            #end
+components:
+  schemas:
+    BooksEntry:
+      type: "object"
+      properties:
+        bookTitle:
+          type: "string"
+        bookAuthor:
+          type: "string"
+        bookGenre:
+          type: "string"
+        publishedYear:
+          type: "integer"
+      required:
+        - bookTitle
+        - bookAuthor
+        - bookGenre
+        - publishedYear
+    BooksEntryResponse:
+      type: "object"
+      properties:
+        id:
+          type: "string"
+        bookTitle:
+          type: "string"
+        bookAuthor:
+          type: "string"
+        bookGenre:
+          type: "string"
+        publishedYear:
+          type: "integer"
+        createdOn:
+          type: "string"
+          format: "date-time"
+        updatedOn:
+          type: "string"
+          format: "date-time"
+      required:
+        - id
+        - bookTitle
+        - bookAuthor
+        - bookGenre
+        - publishedYear
+        - createdOn
+        - updatedOn
+    PostBooksEntryResponse:
+      type: "object"
+      properties:
+        message:
+          type: "string"
+        executionArn:
+          type: "string"
+      required:
+        - message
+        - executionArn

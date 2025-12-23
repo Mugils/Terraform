@@ -1,0 +1,55 @@
+{
+    "Comment": "A description of my state machine",
+    "StartAt": "Choice",
+    "States": {
+        "Choice": {
+            "Type": "Choice",
+            "Choices": [
+                {
+                    "Next": "No Event Passed",
+                    "Condition": "{% $not($exists($states.input.body)) %}"
+                }
+            ],
+            "Default": "Invoke Lambda Function"
+        },
+        "No Event Passed": {
+            "Type": "Pass",
+            "Next": "Fail"
+        },
+        "Fail": {
+            "Type": "Fail"
+        },
+        "Invoke Lambda Function": {
+            "Type": "Task",
+            "Resource": "arn:aws:states:::lambda:invoke",
+            "Output": "{% $states.result.Payload %}",
+            "Arguments": {
+                "FunctionName": "${lambda_function_name}",
+                "Payload": "{% $states.input %}"
+            },
+            "Retry": [
+                {
+                    "ErrorEquals": [
+                        "Lambda.ServiceException",
+                        "Lambda.AWSLambdaException",
+                        "Lambda.SdkClientException",
+                        "Lambda.TooManyRequestsException"
+                    ],
+                    "IntervalSeconds": 1,
+                    "MaxAttempts": 3,
+                    "BackoffRate": 2,
+                    "JitterStrategy": "FULL"
+                }
+            ],
+            "Next": "Print Lambda Response"
+        },
+        "Print Lambda Response": {
+            "Type": "Pass",
+            "Next": "Success"
+        },
+        "Success": {
+            "Type": "Succeed"
+        }
+    },
+    "QueryLanguage": "JSONata"
+}
